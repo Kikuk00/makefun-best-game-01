@@ -5,6 +5,7 @@
 [![reward](https://make.fun/badge/best-game-01/Kikuk00/makefun-best-game-01/reward.svg)](https://make.fun/c/best-game-01)
 
 An entry for [make.fun's "Make the best game" bounty](https://make.fun/c/best-game-01).
+Bounty page: https://make.fun/bounty/best-game-01
 
 **Emberkeep** is a complete, original top-down arena game that plays offline in a
 desktop browser from static files — no build step, no network requests, no
@@ -21,7 +22,11 @@ survive all 10 waves — then defeat the Nightmaw.
 - **P / Esc** — pause, **M** — mute
 
 Between waves you draft one of three blessings: brighter bolts, faster fire,
-twin light, piercing rays, swifter wings, a sturdier lantern, and more. Kills
+twin light, piercing rays, swifter wings, a sturdier lantern, and more. New in
+round 2: **Lantern Thorns** (the lantern zaps the nearest foe) and **Radiance
+Surge** (a stronger Nova that charges faster). The grove itself is alive now —
+charging wisps, splitters that burst into two motes, gold-ringed elite foes
+from wave 6, and a Nightmaw that enrages at half health. Kills
 build a combo multiplier; embers are worth score and charge your Nova. The
 lantern and the keeper each have their own health — lose either and the light
 fades. Your best score is kept in the browser.

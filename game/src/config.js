@@ -16,7 +16,7 @@ export const LANTERN = { x: 640, y: 360, radius: 34, maxHp: 100 };
 export const PLAYER = {
   radius: 14,
   speed: 300,
-  maxHp: 3,
+  maxHp: 4,
   fireInterval: 0.24,
   bulletSpeed: 640,
   bulletDamage: 1,
@@ -24,7 +24,7 @@ export const PLAYER = {
   dashSpeed: 920,
   dashTime: 0.18,
   dashCooldown: 2.4,
-  invulnerable: 1.4,
+  invulnerable: 1.8,
   pickupRadius: 90,
 };
 
@@ -42,20 +42,26 @@ export const ENEMY = {
   spitter: { hp: 2, speed: 48, radius: 14, score: 150, bite: 8, ember: 2 },
   brute: { hp: 14, speed: 34, radius: 26, score: 300, bite: 20, ember: 4 },
   boss: { hp: 150, speed: 28, radius: 44, score: 2000, bite: 30, ember: 12 },
+  // Round 2: a wisp charges at the keeper in fast bursts; a splitter bursts
+  // into two motes when it dies. Collision radii stay small — the renderer
+  // draws every foe ~35% larger than its collision circle so they read big
+  // on screen without making contact unfair.
+  wisp: { hp: 2, speed: 140, radius: 11, score: 100, bite: 6, ember: 2 },
+  splitter: { hp: 4, speed: 52, radius: 16, score: 200, bite: 10, ember: 2 },
 };
 
 /** How many of each kind a wave fields, before the wave's size bonus. */
 export const WAVE_TABLE = [
   { mote: 10 },
   { mote: 12, gloom: 3 },
-  { mote: 14, gloom: 5, spitter: 2 },
-  { mote: 14, gloom: 6, spitter: 3, brute: 1 },
-  { mote: 16, gloom: 7, spitter: 4, brute: 2 },
-  { mote: 16, gloom: 8, spitter: 5, brute: 2 },
-  { mote: 18, gloom: 9, spitter: 6, brute: 3 },
-  { mote: 18, gloom: 10, spitter: 6, brute: 4 },
-  { mote: 20, gloom: 11, spitter: 7, brute: 4 },
-  { boss: 1, mote: 8, spitter: 2 },
+  { mote: 14, gloom: 5, spitter: 2, wisp: 2 },
+  { mote: 14, gloom: 6, spitter: 3, brute: 1, wisp: 3 },
+  { mote: 16, gloom: 7, spitter: 4, brute: 2, wisp: 4, splitter: 2 },
+  { mote: 16, gloom: 8, spitter: 5, brute: 2, wisp: 4, splitter: 3 },
+  { mote: 18, gloom: 9, spitter: 6, brute: 3, wisp: 5, splitter: 3 },
+  { mote: 18, gloom: 10, spitter: 6, brute: 4, wisp: 5, splitter: 4 },
+  { mote: 20, gloom: 11, spitter: 7, brute: 4, wisp: 6, splitter: 4 },
+  { boss: 1, mote: 8, spitter: 2, wisp: 3 },
 ];
 
 export const COMBO_WINDOW = 3;
@@ -76,6 +82,10 @@ export const PALETTE = {
   spitter: '#d870c8',
   brute: '#7a4fd0',
   boss: '#e0407a',
+  bossEnraged: '#ff2a6d',
+  wisp: '#5cf2e0',
+  splitter: '#ff9a3d',
+  eliteRing: '#ffd76a',
   ember: '#ffcf5c',
   text: '#f2ead8',
   muted: '#9aa7bd',

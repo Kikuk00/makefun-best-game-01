@@ -4,7 +4,7 @@
 // to the 1280x720 field so clicks land where the player aimed.
 
 import { FIELD, FONT, LANTERN, PALETTE, RADIANCE_MAX } from './config.js';
-import { KIND_BOSS, KIND_BRUTE, KIND_GLOOM, KIND_MOTE, KIND_SPITTER } from './world.js';
+import { KIND_BOSS, KIND_BRUTE, KIND_GLOOM, KIND_MOTE, KIND_SPITTER, KIND_SPLITTER, KIND_WISP } from './world.js';
 
 export const SCREEN_TITLE = 0;
 export const SCREEN_PLAY = 1;
@@ -98,6 +98,75 @@ export function createRenderer(canvas) {
     glow.addColorStop(1, 'rgba(255, 179, 71, 0)');
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, FIELD.width, FIELD.height);
+    // Grove scenery, fixed by hash so it never changes between frames: grass
+    // tufts, glowing mushrooms, stones and little flowers. Kept clear of the
+    // lantern's heart and the top HUD strip.
+    for (let i = 0; i < 110; i += 1) {
+      const x = hash(i + 2000) * FIELD.width;
+      const y = 70 + hash(i + 3000) * (FIELD.height - 90);
+      if (Math.hypot(x - LANTERN.x, y - LANTERN.y) < 120) continue;
+      const sway = Math.sin(state.time * 1.2 + i) * 2;
+      ctx.strokeStyle = i % 3 === 0 ? '#2c5a3a' : '#22482f';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let b = -1; b <= 1; b += 1) {
+        ctx.moveTo(x + b * 4, y);
+        ctx.lineTo(x + b * 5 + sway, y - 9 - hash(i + b + 4000) * 7);
+      }
+      ctx.stroke();
+    }
+    for (let i = 0; i < 16; i += 1) {
+      const x = hash(i + 5000) * FIELD.width;
+      const y = 80 + hash(i + 6000) * (FIELD.height - 110);
+      if (Math.hypot(x - LANTERN.x, y - LANTERN.y) < 110) continue;
+      const hgt = 10 + hash(i + 7000) * 10;
+      ctx.fillStyle = 'rgba(155, 231, 255, 0.16)';
+      ctx.beginPath();
+      ctx.arc(x, y, hgt + 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#dfe9f5';
+      ctx.fillRect(x - 1.5, y - hgt * 0.5, 3, hgt * 0.5);
+      ctx.fillStyle = i % 2 === 0 ? '#7be495' : '#5cc8ff';
+      ctx.beginPath();
+      ctx.arc(x, y - hgt * 0.5, 7 + hash(i + 8000) * 4, Math.PI, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath();
+      ctx.arc(x - 2, y - hgt * 0.5 - 3, 1.6, 0, Math.PI * 2);
+      ctx.arc(x + 3, y - hgt * 0.5 - 1, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (let i = 0; i < 20; i += 1) {
+      const x = hash(i + 9000) * FIELD.width;
+      const y = 70 + hash(i + 9500) * (FIELD.height - 90);
+      if (Math.hypot(x - LANTERN.x, y - LANTERN.y) < 100) continue;
+      ctx.fillStyle = '#3a4663';
+      ctx.beginPath();
+      ctx.ellipse(x, y, 10 + hash(i + 9800) * 14, 6 + hash(i + 9900) * 6, hash(i) * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.beginPath();
+      ctx.ellipse(x - 3, y - 2, 6, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (let i = 0; i < 26; i += 1) {
+      const x = hash(i + 11000) * FIELD.width;
+      const y = 70 + hash(i + 12000) * (FIELD.height - 90);
+      if (Math.hypot(x - LANTERN.x, y - LANTERN.y) < 100) continue;
+      const cols = ['#ff8fb0', '#ffd76a', '#c9a6ff', '#ff9a3d'];
+      ctx.fillStyle = cols[i % 4];
+      for (let p = 0; p < 5; p += 1) {
+        const a = (p / 5) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(x + Math.cos(a) * 4, y + Math.sin(a) * 4, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#fff3c4';
+      ctx.beginPath();
+      ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   function drawLantern(state) {
@@ -148,8 +217,18 @@ export function createRenderer(canvas) {
 
   function drawEnemy(e, state) {
     const wob = Math.sin(e.wobble * 3) * 2;
+    // A soft glow halo so every foe reads at a glance, even at the field edge.
+    const haloCols = { 0: '179,136,255', 1: '142,111,216', 2: '216,112,200', 3: '122,79,208', 4: '224,64,122', 5: '92,242,224', 6: '255,154,61' };
+    const halo = haloCols[e.kind] ?? '179,136,255';
+    ctx.fillStyle = `rgba(${halo}, 0.18)`;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y + wob, e.radius * 1.35 + 8, 0, Math.PI * 2);
+    ctx.fill();
     ctx.save();
     ctx.translate(e.x, e.y + wob);
+    // Foes are drawn 35% larger than their collision circle: they read big
+    // on screen while contact stays fair.
+    ctx.scale(1.35, 1.35);
     if (e.kind === KIND_MOTE) {
       ctx.fillStyle = PALETTE.mote;
       ctx.beginPath();
@@ -213,9 +292,61 @@ export function createRenderer(canvas) {
       ctx.arc(-8, -4, 3, 0, Math.PI * 2);
       ctx.arc(8, -4, 3, 0, Math.PI * 2);
       ctx.fill();
+    } else if (e.kind === KIND_WISP) {
+      // A wisp: a bright teal comet with a flickering tail, charging in bursts.
+      const tail = e.burst ? 26 : 12;
+      ctx.fillStyle = 'rgba(92, 242, 224, 0.45)';
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.lineTo(-tail, 0);
+      ctx.lineTo(0, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = PALETTE.wisp;
+      ctx.beginPath();
+      ctx.arc(0, 0, e.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#eafffb';
+      ctx.beginPath();
+      ctx.arc(0, 0, e.radius * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+      // Angry slanted eyes.
+      ctx.strokeStyle = '#062a26';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-7, -4);
+      ctx.lineTo(-2, -2);
+      ctx.moveTo(7, -4);
+      ctx.lineTo(2, -2);
+      ctx.stroke();
+    } else if (e.kind === KIND_SPLITTER) {
+      // A splitter: a fat orange two-lobed blob with a crack down the middle.
+      ctx.fillStyle = PALETTE.splitter;
+      ctx.beginPath();
+      ctx.arc(-e.radius * 0.42, 0, e.radius * 0.68, 0, Math.PI * 2);
+      ctx.arc(e.radius * 0.42, 0, e.radius * 0.68, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#7a2d00';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, -e.radius * 0.7);
+      ctx.lineTo(3, -3);
+      ctx.lineTo(-2, 4);
+      ctx.lineTo(1, e.radius * 0.7);
+      ctx.stroke();
+      ctx.fillStyle = '#fff3c4';
+      ctx.beginPath();
+      ctx.arc(-e.radius * 0.42, -4, 2.5, 0, Math.PI * 2);
+      ctx.arc(e.radius * 0.42, -4, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#7a2d00';
+      ctx.beginPath();
+      ctx.arc(-e.radius * 0.42, -4, 1.2, 0, Math.PI * 2);
+      ctx.arc(e.radius * 0.42, -4, 1.2, 0, Math.PI * 2);
+      ctx.fill();
     } else if (e.kind === KIND_BOSS) {
       // The Nightmaw: a large spiked shadow with a glowing maw.
-      ctx.fillStyle = PALETTE.boss;
+      ctx.fillStyle = e.enraged ? PALETTE.bossEnraged : PALETTE.boss;
       ctx.beginPath();
       for (let i = 0; i < 12; i += 1) {
         const a = (i / 12) * Math.PI * 2;
@@ -227,6 +358,18 @@ export function createRenderer(canvas) {
       }
       ctx.closePath();
       ctx.fill();
+      if (e.enraged) {
+        // Enraged crown: three gold spikes above the maw.
+        ctx.fillStyle = PALETTE.eliteRing;
+        for (let i = -1; i <= 1; i += 1) {
+          ctx.beginPath();
+          ctx.moveTo(i * 16 - 6, -e.radius + 4);
+          ctx.lineTo(i * 16, -e.radius - 14);
+          ctx.lineTo(i * 16 + 6, -e.radius + 4);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
       ctx.fillStyle = '#2a0a1a';
       ctx.beginPath();
       ctx.ellipse(0, 6, 22, 12, 0, 0, Math.PI * 2);
@@ -237,14 +380,35 @@ export function createRenderer(canvas) {
       ctx.arc(14, -12, 4, 0, Math.PI * 2);
       ctx.fill();
     }
+    // Hit-flash: a brief white blink when a bolt (or a thorn zap) lands.
+    if (e.flash > 0) {
+      ctx.globalAlpha = Math.min(1, e.flash / 0.12) * 0.85;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, e.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
     ctx.restore();
+    // Elites wear a gold ring (sized to the drawn body, 1.35x the collision circle).
+    if (e.elite) {
+      ctx.strokeStyle = PALETTE.eliteRing;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y + wob, e.radius * 1.35 + 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = PALETTE.eliteRing;
+      ctx.font = `800 11px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.fillText('ELITE', e.x, e.y - e.radius * 1.35 - 16);
+    }
     // Health bar for tough foes.
     if (e.maxHp > 2 && e.hp < e.maxHp) {
-      const w = e.radius * 2;
+      const w = e.radius * 2.7;
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(e.x - w / 2, e.y - e.radius - 12, w, 5);
+      ctx.fillRect(e.x - w / 2, e.y - e.radius * 1.35 - 12, w, 5);
       ctx.fillStyle = '#ff6b6b';
-      ctx.fillRect(e.x - w / 2, e.y - e.radius - 12, w * (e.hp / e.maxHp), 5);
+      ctx.fillRect(e.x - w / 2, e.y - e.radius * 1.35 - 12, w * (e.hp / e.maxHp), 5);
     }
   }
 
@@ -413,17 +577,20 @@ export function createRenderer(canvas) {
     ctx.fillText('WASD / arrows — fly      Mouse — aim      Click / Space — shoot', FIELD.width / 2, 326);
     ctx.fillText('Shift — dash      E — Radiance Nova when the meter is full', FIELD.width / 2, 352);
     ctx.fillText('Survive all 10 waves. Pick a blessing between waves.', FIELD.width / 2, 378);
+    ctx.fillStyle = '#ffb347';
+    ctx.fillText('Beware charging wisps, splitters that burst in two, elite foes —', FIELD.width / 2, 404);
+    ctx.fillText('and a Nightmaw that enrages at half health.', FIELD.width / 2, 428);
     ctx.fillStyle = PALETTE.ember;
     ctx.font = `800 24px ${FONT}`;
-    ctx.fillText(best > 0 ? `BEST SCORE  ${best}` : 'PRESS SPACE OR CLICK TO BEGIN', FIELD.width / 2, 436);
+    ctx.fillText(best > 0 ? `BEST SCORE  ${best}` : 'PRESS SPACE OR CLICK TO BEGIN', FIELD.width / 2, 472);
     if (best > 0) {
       ctx.fillStyle = PALETTE.muted;
       ctx.font = `600 18px ${FONT}`;
-      ctx.fillText('Press Space or click to begin', FIELD.width / 2, 470);
+      ctx.fillText('Press Space or click to begin', FIELD.width / 2, 500);
     }
     ctx.fillStyle = PALETTE.muted;
     ctx.font = `400 15px ${FONT}`;
-    ctx.fillText('P pauses · M mutes · your best score stays in this browser', FIELD.width / 2, 524);
+    ctx.fillText('P pauses · M mutes · your best score stays in this browser', FIELD.width / 2, 536);
   }
 
   function drawUpgrade(state) {
@@ -585,6 +752,53 @@ export function createRenderer(canvas) {
       ctx.fill();
     }
     drawPlayer(state);
+    // Muzzle flash: a bright star at the staff tip, fading in a few frames.
+    if (state.muzzleLife > 0) {
+      const ma = state.muzzleLife / 0.07;
+      ctx.save();
+      ctx.translate(state.muzzleX, state.muzzleY);
+      ctx.rotate(state.muzzleAngle);
+      ctx.globalAlpha = ma;
+      ctx.fillStyle = '#ffe9a8';
+      ctx.beginPath();
+      ctx.moveTo(12, 0);
+      ctx.lineTo(2, -4);
+      ctx.lineTo(-4, 0);
+      ctx.lineTo(2, 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, 4 * ma + 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+    // Lantern Thorns zap: a jagged green bolt from the lantern to its victim.
+    if (state.zapLife > 0) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, state.zapLife / 0.18);
+      ctx.strokeStyle = '#7be495';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      const zx = state.zapX;
+      const zy = state.zapY;
+      const segs = 5;
+      ctx.moveTo(LANTERN.x, LANTERN.y);
+      for (let s = 1; s < segs; s += 1) {
+        const t = s / segs;
+        const off = (s % 2 === 0 ? 10 : -10) * (1 - t);
+        ctx.lineTo(LANTERN.x + (zx - LANTERN.x) * t + off, LANTERN.y + (zy - LANTERN.y) * t - off);
+      }
+      ctx.lineTo(zx, zy);
+      ctx.stroke();
+      ctx.fillStyle = '#eafff0';
+      ctx.beginPath();
+      ctx.arc(zx, zy, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
     // Particles.
     for (const p of state.particles) {
       if (!p.active) continue;

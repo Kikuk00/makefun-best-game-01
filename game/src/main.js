@@ -177,7 +177,11 @@ function runGame() {
     }
     if (events & EVENT_HIT) {
       audio.hurt();
-      announce(world.state.player.hp === 1 ? 'Hit. 1 heart left.' : `Hit. ${world.state.player.hp} hearts left.`);
+      // On the killing hit endGame already announced the ending; do not
+      // overwrite it with a hit message.
+      if (!(events & (EVENT_OVER | EVENT_WIN))) {
+        announce(world.state.player.hp === 1 ? 'Hit. 1 heart left.' : `Hit. ${world.state.player.hp} hearts left.`);
+      }
     }
     if (events & EVENT_LANTERN_HIT) audio.lanternHit();
     if (events & EVENT_KILL) audio.enemyDie();

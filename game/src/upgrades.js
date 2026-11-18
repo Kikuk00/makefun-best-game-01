@@ -92,6 +92,25 @@ export const UPGRADES = [
       mods.bulletSpeed *= 1.25;
     },
   },
+  {
+    id: 'thorns',
+    name: 'Lantern Thorns',
+    desc: 'Lantern zaps a nearby foe',
+    max: 3,
+    apply(mods) {
+      mods.thorns = (mods.thorns ?? 0) + 1;
+    },
+  },
+  {
+    id: 'surge',
+    name: 'Radiance Surge',
+    desc: 'Nova +4 damage, charges 25% faster',
+    max: 3,
+    apply(mods) {
+      mods.surge = (mods.surge ?? 0) + 1;
+      mods.radianceRate = 1 + 0.25 * mods.surge;
+    },
+  },
 ];
 
 /** The three cards for the draft after `wave`, given the levels already taken. */

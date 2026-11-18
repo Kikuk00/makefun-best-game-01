@@ -33,9 +33,11 @@ export const KIND_GLOOM = 1;
 export const KIND_SPITTER = 2;
 export const KIND_BRUTE = 3;
 export const KIND_BOSS = 4;
+export const KIND_WISP = 5;
+export const KIND_SPLITTER = 6;
 
-const KIND_DEFS = [ENEMY.mote, ENEMY.gloom, ENEMY.spitter, ENEMY.brute, ENEMY.boss];
-const KIND_NAMES = ['mote', 'gloom', 'spitter', 'brute', 'boss'];
+const KIND_DEFS = [ENEMY.mote, ENEMY.gloom, ENEMY.spitter, ENEMY.brute, ENEMY.boss, ENEMY.wisp, ENEMY.splitter];
+const KIND_NAMES = ['mote', 'gloom', 'spitter', 'brute', 'boss', 'wisp', 'splitter'];
 
 export const EVENT_HIT = 1;
 export const EVENT_EMBER = 2;
@@ -77,7 +79,7 @@ export function createWorld(random) {
   const lantern = { hp: LANTERN.maxHp, flicker: 0 };
   const enemies = [];
   for (let i = 0; i < MAX_ENEMIES; i += 1) {
-    enemies.push({ active: false, kind: KIND_MOTE, x: 0, y: 0, vx: 0, vy: 0, hp: 1, maxHp: 1, speed: 0, radius: 0, shootTimer: 0, biteTimer: 0, wobble: 0, target: 0 });
+    enemies.push({ active: false, kind: KIND_MOTE, x: 0, y: 0, vx: 0, vy: 0, hp: 1, maxHp: 1, speed: 0, radius: 0, shootTimer: 0, biteTimer: 0, wobble: 0, target: 0, elite: false, flash: 0, charge: 0, burst: 0, enraged: false });
   }
   const bullets = [];
   for (let i = 0; i < MAX_BULLETS; i += 1) {
@@ -115,6 +117,9 @@ export function createWorld(random) {
     pickupRadius: PLAYER.pickupRadius,
     dashCooldown: PLAYER.dashCooldown,
     bulletSpeed: PLAYER.bulletSpeed,
+    thorns: 0,
+    surge: 0,
+    radianceRate: 1,
   };
 
   const state = {
@@ -146,6 +151,16 @@ export function createWorld(random) {
     shake: 0,
     time: 0,
     novaFlash: 0,
+    // Lantern Thorns zap: the last zap's target and how long its bolt stays visible.
+    thornTimer: 0,
+    zapX: 0,
+    zapY: 0,
+    zapLife: 0,
+    // Muzzle flash: where the last bolt left the keeper's staff, and its angle.
+    muzzleX: 0,
+    muzzleY: 0,
+    muzzleAngle: 0,
+    muzzleLife: 0,
   };
 
   function spawnParticle(x, y, color, count, speed) {
@@ -189,6 +204,31 @@ export function createWorld(random) {
     }
   }
 
+  /** Spawn `kind` at a fixed spot (splitter motes, boss summons). */
+  function spawnEnemyAt(kind, x, y) {
+    const e = enemies.find((q) => !q.active);
+    if (!e) return;
+    const def = KIND_DEFS[kind];
+    e.active = true;
+    e.kind = kind;
+    e.x = x;
+    e.y = y;
+    e.hp = e.maxHp = def.hp + Math.floor((state.wave - 1) / 4);
+    e.speed = def.speed * (1 + (state.wave - 1) * 0.03);
+    e.radius = def.radius;
+    e.shootTimer = 1.5 + random() * 1.5;
+    e.biteTimer = 0;
+    e.wobble = random() * Math.PI * 2;
+    e.target = kind === KIND_MOTE || kind === KIND_SPITTER || kind === KIND_WISP ? 1 : 0;
+    e.vx = 0;
+    e.vy = 0;
+    e.elite = false;
+    e.flash = 0;
+    e.charge = 1 + random();
+    e.burst = 0;
+    e.enraged = false;
+  }
+
   function spawnEnemy(kind) {
     const e = enemies.find((q) => !q.active);
     if (!e) return;
@@ -206,16 +246,29 @@ export function createWorld(random) {
     }
     e.active = true;
     e.kind = kind;
-    e.hp = e.maxHp = def.hp + Math.floor((state.wave - 1) / 3);
+    e.hp = e.maxHp = def.hp + Math.floor((state.wave - 1) / 4);
     e.speed = def.speed * (1 + (state.wave - 1) * 0.03);
     e.radius = def.radius;
     e.shootTimer = 1.5 + random() * 1.5;
     e.biteTimer = 0;
     e.wobble = random() * Math.PI * 2;
-    // Motes and spitters hunt the keeper; glooms, brutes and the boss hunt the lantern.
-    e.target = kind === KIND_MOTE || kind === KIND_SPITTER ? 1 : 0;
+    // Motes, spitters and wisps hunt the keeper; glooms, brutes and the boss hunt the lantern.
+    e.target = kind === KIND_MOTE || kind === KIND_SPITTER || kind === KIND_WISP ? 1 : 0;
     e.vx = 0;
     e.vy = 0;
+    // Elites (wave 6+): 1.5x HP, a quarter wider, a gold ring, more score and
+    // embers. Capped at 6 alive so the field never floods with them.
+    let elitesAlive = 0;
+    for (const q of enemies) if (q.active && q.elite) elitesAlive += 1;
+    e.elite = kind !== KIND_BOSS && state.wave >= 6 && elitesAlive < 6 && random() < 0.12;
+    if (e.elite) {
+      e.hp = e.maxHp = Math.round(e.hp * 1.5);
+      e.radius = Math.round(e.radius * 1.1);
+    }
+    e.flash = 0;
+    e.charge = 1 + random();
+    e.burst = 0;
+    e.enraged = false;
   }
 
   function startWave(n) {
@@ -253,11 +306,18 @@ export function createWorld(random) {
     state.combo = Math.min(state.combo + 1, COMBO_MAX);
     state.comboTimer = COMBO_WINDOW;
     const mult = state.combo;
-    const gained = def.score * mult;
+    // Elites pay double score and drop two extra embers.
+    const gained = def.score * mult * (e.elite ? 2 : 1);
     state.score += gained;
-    floatText(e.x, e.y - e.radius, `+${gained}`, mult > 1 ? '#ffd76a' : '#f2ead8');
-    dropEmbers(e.x, e.y, def.ember);
+    floatText(e.x, e.y - e.radius, `+${gained}`, e.elite ? '#ffd76a' : mult > 1 ? '#ffd76a' : '#f2ead8');
+    dropEmbers(e.x, e.y, def.ember + (e.elite ? 2 : 0));
     spawnParticle(e.x, e.y, '#b388ff', e.kind === KIND_BOSS ? 40 : 10, 160);
+    if (e.kind === KIND_SPLITTER) {
+      // A splitter bursts into two motes where it died.
+      spawnEnemyAt(KIND_MOTE, e.x - 14, e.y);
+      spawnEnemyAt(KIND_MOTE, e.x + 14, e.y);
+      spawnParticle(e.x, e.y, '#ff9a3d', 14, 200);
+    }
     if (e.kind === KIND_BOSS) {
       state.shake = Math.max(state.shake, 0.6);
       spawnParticle(e.x, e.y, '#ff6b9d', 40, 260);
@@ -296,9 +356,11 @@ export function createWorld(random) {
     state.novaFlash = 0.5;
     state.shake = Math.max(state.shake, 0.5);
     let events = 0;
+    // Radiance Surge raises Nova damage by +4 per level (8 base).
+    const novaDamage = 8 + 4 * (mods.surge ?? 0);
     for (const e of enemies) {
       if (!e.active) continue;
-      e.hp -= 8;
+      e.hp -= novaDamage;
       spawnParticle(e.x, e.y, '#ffe9a8', 8, 200);
       if (e.hp <= 0) events = killEnemy(e, events);
     }
@@ -352,6 +414,9 @@ export function createWorld(random) {
     mods.pickupRadius = PLAYER.pickupRadius;
     mods.dashCooldown = PLAYER.dashCooldown;
     mods.bulletSpeed = PLAYER.bulletSpeed;
+    mods.thorns = 0;
+    mods.surge = 0;
+    mods.radianceRate = 1;
     state.score = 0;
     state.combo = 0;
     state.comboTimer = 0;
@@ -369,6 +434,14 @@ export function createWorld(random) {
     state.shake = 0;
     state.time = 0;
     state.novaFlash = 0;
+    state.thornTimer = 0;
+    state.zapX = 0;
+    state.zapY = 0;
+    state.zapLife = 0;
+    state.muzzleX = 0;
+    state.muzzleY = 0;
+    state.muzzleAngle = 0;
+    state.muzzleLife = 0;
   }
 
   /**
@@ -382,6 +455,8 @@ export function createWorld(random) {
     lantern.flicker = Math.max(0, lantern.flicker - dt);
     state.shake = Math.max(0, state.shake - dt * 1.4);
     state.novaFlash = Math.max(0, state.novaFlash - dt);
+    state.zapLife = Math.max(0, state.zapLife - dt);
+    state.muzzleLife = Math.max(0, state.muzzleLife - dt);
     if (state.comboTimer > 0) {
       state.comboTimer -= dt;
       if (state.comboTimer <= 0) state.combo = 0;
@@ -465,6 +540,11 @@ export function createWorld(random) {
       player.fireTimer -= dt;
       if (input.firing && player.fireTimer <= 0) {
         player.fireTimer = mods.fireInterval;
+        // Muzzle flash at the staff tip, in the aim direction.
+        state.muzzleX = player.x + Math.cos(player.angle) * (player.radius + 26);
+        state.muzzleY = player.y + Math.sin(player.angle) * (player.radius + 26);
+        state.muzzleAngle = player.angle;
+        state.muzzleLife = 0.07;
         const count = mods.projectiles;
         const spread = 0.14;
         for (let i = 0; i < count; i += 1) {
@@ -501,6 +581,7 @@ export function createWorld(random) {
         if (b.hit === e) continue;
         if (dist2(b.x, b.y, e.x, e.y) < (5 + e.radius) * (5 + e.radius)) {
           e.hp -= b.damage;
+          e.flash = 0.12;
           spawnParticle(b.x, b.y, '#ffd76a', 3, 110);
           if (e.hp <= 0) events = killEnemy(e, events);
           if (b.pierce > 0) {
@@ -518,6 +599,20 @@ export function createWorld(random) {
     for (const e of enemies) {
       if (!e.active) continue;
       e.wobble += dt * 2;
+      e.flash = Math.max(0, e.flash - dt);
+      // Boss phase 2: at half health the Nightmaw enrages — faster, fiercer,
+      // and it calls motes to its side.
+      if (e.kind === KIND_BOSS && !e.enraged && e.hp <= e.maxHp / 2) {
+        e.enraged = true;
+        e.speed *= 1.35;
+        e.shootTimer = 0.4;
+        state.shake = Math.max(state.shake, 0.5);
+        floatText(e.x, e.y - e.radius - 12, 'NIGHTMAW ENRAGED!', '#ff2a6d');
+        spawnParticle(e.x, e.y, '#ff2a6d', 24, 240);
+        for (let n = 0; n < 3; n += 1) {
+          spawnEnemyAt(KIND_MOTE, e.x + (random() - 0.5) * 140, e.y + (random() - 0.5) * 140);
+        }
+      }
       const tx = e.target === 1 && player.alive ? player.x : LANTERN.x;
       const ty = e.target === 1 && player.alive ? player.y : LANTERN.y;
       const dx = tx - e.x;
@@ -531,6 +626,18 @@ export function createWorld(random) {
         // Spitters hold their distance and strafe.
         mx = -nx * 0.4 + -ny * 0.6;
         my = -ny * 0.4 + nx * 0.6;
+      } else if (e.kind === KIND_WISP) {
+        // Wisps drift slowly, then charge at the keeper in a fast burst.
+        e.charge -= dt;
+        if (e.charge <= 0) {
+          e.charge = 1.3 + random() * 0.7;
+          e.burst = 0;
+        } else if (e.charge <= 0.5) {
+          e.burst = 1;
+        }
+        const burstSpeed = e.burst ? 1.7 : 0.55;
+        mx = nx * burstSpeed;
+        my = ny * burstSpeed;
       } else if (e.kind === KIND_MOTE) {
         mx = nx + Math.cos(e.wobble) * 0.35;
         my = ny + Math.sin(e.wobble) * 0.35;
@@ -545,7 +652,7 @@ export function createWorld(random) {
       if (e.kind === KIND_SPITTER || e.kind === KIND_BOSS) {
         e.shootTimer -= dt;
         if (e.shootTimer <= 0 && d < 520) {
-          e.shootTimer = e.kind === KIND_BOSS ? 1.6 : 2.6;
+          e.shootTimer = e.kind === KIND_BOSS ? (e.enraged ? 0.9 : 1.6) : 2.6;
           const ob = ebullets.find((q) => !q.active);
           if (ob) {
             const aimX = player.alive ? player.x : LANTERN.x;
@@ -553,7 +660,7 @@ export function createWorld(random) {
             const adx = aimX - e.x;
             const ady = aimY - e.y;
             const ad = Math.hypot(adx, ady) || 1;
-            const spd = e.kind === KIND_BOSS ? 260 : 190;
+            const spd = e.kind === KIND_BOSS ? (e.enraged ? 300 : 260) : 190;
             ob.active = true;
             ob.x = e.x;
             ob.y = e.y;
@@ -611,6 +718,33 @@ export function createWorld(random) {
       }
     }
 
+    // --- Lantern Thorns: every 1.6 s the lantern zaps the nearest foe within 180px. ---
+    if (mods.thorns > 0) {
+      state.thornTimer -= dt;
+      if (state.thornTimer <= 0) {
+        state.thornTimer = 1.6;
+        let victim = null;
+        let victimD = 180;
+        for (const e of enemies) {
+          if (!e.active) continue;
+          const dd = Math.hypot(e.x - LANTERN.x, e.y - LANTERN.y);
+          if (dd < victimD) {
+            victimD = dd;
+            victim = e;
+          }
+        }
+        if (victim) {
+          victim.hp -= 2 + mods.thorns;
+          victim.flash = 0.12;
+          state.zapX = victim.x;
+          state.zapY = victim.y;
+          state.zapLife = 0.18;
+          spawnParticle(victim.x, victim.y, '#7be495', 6, 160);
+          if (victim.hp <= 0) events = killEnemy(victim, events);
+        }
+      }
+    }
+
     // --- Embers drift to the keeper ---
     for (const em of embers) {
       if (!em.active) continue;
@@ -631,7 +765,8 @@ export function createWorld(random) {
         state.embersCollected += 1;
         state.score += 10;
         const wasFull = state.radiance >= RADIANCE_MAX;
-        state.radiance = Math.min(RADIANCE_MAX, state.radiance + RADIANCE_PER_EMBER);
+        // Radiance Surge charges the meter 25% faster per level.
+        state.radiance = Math.min(RADIANCE_MAX, state.radiance + RADIANCE_PER_EMBER * (mods.radianceRate ?? 1));
         if (!wasFull && state.radiance >= RADIANCE_MAX) events |= EVENT_NOVA_READY;
         events |= EVENT_EMBER;
       }
